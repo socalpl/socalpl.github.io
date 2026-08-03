@@ -144,7 +144,7 @@ function render(){
     return el('button',{class: kind==='tabsub' ? 'mi sub' : 'mi',text:label,role:'menuitem',onclick:()=>{
       panel.classList.remove('open'); $('#menuBtn').setAttribute('aria-expanded','false');
       if(kind==='out') return signOut();
-      state.tab=val; state.sel=null; render(); }});
+      state.tab=val; state.sel=null; state.editMe=false; render(); }});
   }));
   const m = $('#main'); m.replaceChildren();
   ({tables:vTables, fixtures:vFixtures, me:vMe, club:vClub, admin:vAdmin, in:vSignIn}[state.tab]||vTables)(m);
@@ -246,12 +246,34 @@ function vFixtures(m){
 function vMe(m){
   const p = state.profile;
   m.appendChild(el('h2',{text:'My profile'}));
-  const fields = [['name','Name'],['phone','Phone'],['rating','Rating'],['shirt','Shirt size']];
-  const inputs = {};
-  fields.forEach(([k,l])=>{ m.appendChild(el('label',{text:l}));
-    inputs[k]=el('input',{value:p[k]||'',style:'width:280px'}); m.appendChild(inputs[k]); });
-  m.appendChild(el('label',{text:'Gender (for lineup rules)'}));
-  const g = el('select',{},[el('option',{value:'M',text:'M'}),el('option',{value:'W',text:'W'})]); g.value=p.gender; m.appendChild(g);
+  m.appendChild(el('div',{class:'sub',text:'Signed in as ' + p.email}));
+  const fields = [['name','Name'],['phone','Phone'],['rating','Rating'],['shirt','Shirt size'],['gender','Gender (for lineup rules)']];
+  if(!state.editMe){
+    fields.forEach(([k,l])=>{
+      const row = el('div',{class:'row'});
+      row.appendChild(el('span',{text:l,style:'width:190px;color:var(--muted)'}));
+      row.appendChild(el('b',{text: (p[k] && String(p[k]).trim()) || '\u2014'}));
+      m.appendChild(row);
+    });
+    m.appendChild(el('div',{style:'margin-top:14px'},[el('button',{class:'ghost',text:'\u270E Edit profile',onclick:()=>{ state.editMe = true; render(); }})]));
+  } else {
+    const inputs = {};
+    fields.slice(0,4).forEach(([k,l])=>{ m.appendChild(el('label',{text:l}));
+      inputs[k]=el('input',{value:p[k]||'',style:'width:280px'}); m.appendChild(inputs[k]); });
+    m.appendChild(el('label',{text:'Gender (for lineup rules)'}));
+    const g = el('select',{},[el('option',{value:'M',text:'M'}),el('option',{value:'W',text:'W'})]); g.value=p.gender; m.appendChild(g);
+    const bar = el('div',{style:'margin-top:14px;display:flex;gap:10px'});
+    bar.appendChild(el('button',{class:'btn',text:'Save',onclick:async()=>{
+      const upd = { gender:g.value };
+      fields.slice(0,4).forEach(([k])=>upd[k]=inputs[k].value);
+      const { error } = await db.from('profiles').update(upd).eq('id',p.id);
+      if(error) return toast('Error: '+error.message);
+      state.editMe = false;
+      await loadProfile(); toast('Saved.'); render();
+    }}));
+    bar.appendChild(el('button',{class:'ghost',text:'Cancel',onclick:()=>{ state.editMe = false; render(); }}));
+    m.appendChild(bar);
+  }
   m.appendChild(el('label',{text:'Club'}));
   const myClubName = (state.clubs.find(x=>x.id===p.club_id)||{}).name;
   m.appendChild(el('div',{style:'font-size:16px;padding:6px 0'},[
@@ -259,21 +281,13 @@ function vMe(m){
   m.appendChild(el('div',{class:'sub',text: myClubName
     ? 'Assigned by the league. Contact hello@socalpl.com about transfers.'
     : 'Clubs are assigned by the league. Claim a club or join one at socalpl.com.'}));
-  m.appendChild(el('div',{style:'margin-top:14px'},[el('button',{class:'btn',text:'Save',onclick:async()=>{
-    const upd = { gender:g.value };
-    fields.forEach(([k])=>upd[k]=inputs[k].value);
-    const { error } = await db.from('profiles').update(upd).eq('id',p.id);
-    if(error) return toast('Error: '+error.message);
-    await loadProfile(); toast('Saved.'); render();
-  }})]));
   if(state.settings.stripe_link && !p.paid)
     m.appendChild(el('div',{style:'margin-top:16px'},[el('a',{href:state.settings.stripe_link,target:'_blank'},
       [el('button',{class:'ghost',text:'Pay league fee'})])]));
   const mine = state.clubs.find(x=>x.id===p.club_id);
   if(mine && mine.division){
     m.appendChild(el('div',{class:'sec',text:'My season'}));
-    const note = el('div',{class:'sub',text:'Full schedule with results is on the Fixtures tab — your club is '+mine.name+'.'});
-    m.appendChild(note);
+    m.appendChild(el('div',{class:'sub',text:'Your schedule is under Fixtures in the menu \u2014 your club is '+mine.name+'.'}));
   }
 }
 
