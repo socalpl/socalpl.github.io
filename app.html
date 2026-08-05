@@ -483,29 +483,8 @@ function vAdmin(m){
   }
 
   m.appendChild(el('div',{class:'sec',text:'Interest & claims'}));
+  m.appendChild(el('div',{class:'sub',text:'Signups who have not created an account yet \u2014 your follow-up queue. Once someone signs in they disappear from here and appear in People below with their request attached.'}));
   const iWrap = el('div'); m.appendChild(iWrap);
-  db.from('interest').select('*').order('created_at',{ascending:false}).then(({data,error})=>{
-    if(error){ iWrap.appendChild(el('p',{class:'mut',text:'Could not load interest submissions.'})); return; }
-    if(!data || !data.length){ iWrap.appendChild(el('p',{class:'mut',text:'No submissions yet. They arrive from the Join form on the main site.'})); return; }
-    const kindLabel = { player:'Single player', group:'Group', club_claim:'Claiming club' };
-    iWrap.appendChild(el('div',{class:'sub',text:data.length+' submission'+(data.length>1?'s':'')+' \u00b7 newest first'}));
-    data.forEach(r=>{
-      const card = el('div',{class:'card'});
-      const club = r.club_id ? (clubById(r.club_id).name) : (r.new_club ? ('New: '+r.new_club) : 'No club preference');
-      const when = r.created_at ? new Date(r.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
-      card.innerHTML = `<div class="h">${esc(r.name)} <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">\u00b7 ${esc(kindLabel[r.kind]||r.kind)}</span></div>`;
-      const line = (lbl,val)=> val ? `<div class="row"><span style="width:90px;color:var(--muted)">${lbl}</span><span style="flex:1">${esc(val)}</span></div>` : '';
-      card.innerHTML += line('Email', r.email) + line('Club', club) + line('Level', r.level) + line('Players', r.players) + line('Notes', r.notes) + (when?`<div class="row"><span style="width:90px;color:var(--muted)">Received</span><span>${when}</span></div>`:'');
-      const del = el('button',{class:'ghost red',text:'Delete',style:'margin-top:8px',onclick:async()=>{
-        if(!confirm('Delete this submission from '+r.name+'?')) return;
-        const { error } = await db.from('interest').delete().eq('id',r.id);
-        if(error) return toast('Error: '+error.message);
-        card.remove(); toast('Deleted.');
-      }});
-      card.appendChild(del);
-      iWrap.appendChild(card);
-    });
-  });
 
   m.appendChild(el('div',{class:'sec',text:'Season dates'}));
   m.appendChild(el('div',{class:'sub',text:'Set the date of Night 1 (the first Tuesday). Every night dates itself from this.'}));
@@ -527,8 +506,8 @@ function vAdmin(m){
   const rS = mkSearch('Search rostered players\u2026'); m.appendChild(rS.box);
   const rw = el('div',{class:'tw'}); m.appendChild(rw);
 
-  const buildPeople = (host, rows, search, emptyText) => {
-    const t2 = el('table'); t2.innerHTML='<thead><tr><th>Name</th><th>Email</th><th>G</th><th>Club</th><th>Role</th><th>Paid</th></tr></thead>';
+  const buildPeople = (host, rows, search, emptyText, wantsMap) => {
+    const t2 = el('table'); t2.innerHTML='<thead><tr><th>Name</th><th>Email</th><th>G</th>'+(wantsMap?'<th>Wants</th>':'')+'<th>Club</th><th>Role</th><th>Paid</th></tr></thead>';
     const b2 = el('tbody');
     if(!rows.length){ host.appendChild(el('div',{class:'sub',text:emptyText})); }
     rows.forEach(u=>{
@@ -538,6 +517,15 @@ function vAdmin(m){
       tr.appendChild(el('td',{text:u.name||'\u2014'}));
       tr.appendChild(el('td',{text:u.email}));
       tr.appendChild(el('td',{text:u.gender}));
+      if(wantsMap){
+        const wr = wantsMap[(u.email||'').toLowerCase()];
+        let wTxt = '\u2014';
+        if(wr){ const wc = wr.club_id ? (clubById(wr.club_id).name) : (wr.new_club ? ('New: '+wr.new_club) : ''); 
+          wTxt = [wc, wr.level, wr.players].filter(Boolean).join(' \u00b7 ') || '\u2014'; }
+        const wTd = el('td',{text:wTxt,style:'max-width:220px'}); wTd.dataset.sort = wTxt==='\u2014' ? '' : wTxt;
+        tr.appendChild(wTd);
+        if(wr) tr.dataset.search = (tr.dataset.search||'') + ' ' + wTxt.toLowerCase();
+      }
       const cs = el('select',{onchange:async e=>{ await db.from('profiles').update({club_id:e.target.value||null}).eq('id',u.id);
           const nm = e.target.selectedOptions[0].textContent; cs.parentElement.dataset.sort = nm; setSearch(nm); }},
         [el('option',{value:'',text:'\u2014'}),...state.clubs.map(c=>el('option',{value:c.id,text:c.name}))]);
@@ -558,12 +546,45 @@ function vAdmin(m){
     t2.appendChild(b2); host.appendChild(t2); sortable(t2); search.bind(b2);
   };
 
-  db.from('profiles').select('*').order('created_at').then(({data})=>{
-    const all = data||[];
-    const rostered = all.filter(u=>u.club_id && (u.name||'').trim() && u.gender);
-    const pipeline = all.filter(u=>!(u.club_id && (u.name||'').trim() && u.gender));
-    buildPeople(pw, pipeline, pS, 'Nobody waiting. Everyone with an account is rostered.');
-    buildPeople(rw, rostered, rS, 'No rostered players yet. Assign clubs above and have players complete their profiles.');
+  Promise.all([
+    db.from('interest').select('*').order('created_at',{ascending:false}),
+    db.from('profiles').select('*').order('created_at')
+  ]).then(([iRes,pRes])=>{
+    const interest = iRes.data||[]; const all = pRes.data||[];
+    const emails = new Set(all.map(u=>(u.email||'').toLowerCase()));
+    const queue = interest.filter(r=>!emails.has((r.email||'').toLowerCase()));
+    const wants = {};
+    interest.forEach(r=>{ const e=(r.email||'').toLowerCase(); if(e && !wants[e]) wants[e]=r; });
+
+    /* follow-up queue */
+    if(iRes.error){ iWrap.appendChild(el('p',{class:'mut',text:'Could not load interest submissions.'})); }
+    else if(!interest.length){ iWrap.appendChild(el('p',{class:'mut',text:'No submissions yet. They arrive from the Join form on the main site.'})); }
+    else if(!queue.length){ iWrap.appendChild(el('p',{class:'mut',text:'Everyone who signed up has an account. Nothing to chase.'})); }
+    else {
+      const kindLabel = { player:'Single player', group:'Group', club_claim:'Claiming club' };
+      iWrap.appendChild(el('div',{class:'sub',text:queue.length+' waiting on account creation \u00b7 newest first'}));
+      queue.forEach(r=>{
+        const card = el('div',{class:'card'});
+        const club = r.club_id ? (clubById(r.club_id).name) : (r.new_club ? ('New: '+r.new_club) : 'No club preference');
+        const when = r.created_at ? new Date(r.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+        card.innerHTML = `<div class="h">${esc(r.name)} <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">\u00b7 ${esc(kindLabel[r.kind]||r.kind)}</span></div>`;
+        const line = (lbl,val)=> val ? `<div class="row"><span style="width:90px;color:var(--muted)">${lbl}</span><span style="flex:1">${esc(val)}</span></div>` : '';
+        card.innerHTML += line('Email', r.email) + line('Club', club) + line('Level', r.level) + line('Players', r.players) + line('Notes', r.notes) + (when?`<div class="row"><span style="width:90px;color:var(--muted)">Received</span><span>${when}</span></div>`:'');
+        const del = el('button',{class:'ghost red',text:'Delete',style:'margin-top:8px',onclick:async()=>{
+          if(!confirm('Delete this submission from '+r.name+'?')) return;
+          const { error } = await db.from('interest').delete().eq('id',r.id);
+          if(error) return toast('Error: '+error.message);
+          card.remove(); toast('Deleted.');
+        }});
+        card.appendChild(del);
+        iWrap.appendChild(card);
+      });
+    }
+
+    /* people & rostered */
+    const done = u => u.club_id && (u.name||'').trim() && u.gender;
+    buildPeople(pw, all.filter(u=>!done(u)), pS, 'Nobody waiting. Everyone with an account is rostered.', wants);
+    buildPeople(rw, all.filter(done), rS, 'No rostered players yet. Assign clubs above and have players complete their profiles.', null);
   });
 
   m.appendChild(el('div',{class:'sec',text:'Results needing attention'}));
