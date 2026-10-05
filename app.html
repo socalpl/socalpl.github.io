@@ -121,19 +121,25 @@ function nightDate(night, day){
 const fixTime = f => (f.night===8 || f.round%2===1) ? '6:30 PM' : '~7:45 PM';
 const resFor = fid => state.results.find(r=>r.fixture_id===fid);
 const linesOf = r => [[r.l1h,r.l1a],[r.l2h,r.l2a],[r.l3h,r.l3a],[r.l4h,r.l4a]];
+/* line 5: singles tiebreak, played only when the four lines finish 2-2 */
+const tbOf = r => (r.l5h!=null && r.l5a!=null && r.l5h!==r.l5a) ? [r.l5h,r.l5a] : null;
+/* fixture score as [home, away] lines; null if 2-2 with no tiebreak recorded */
+const fixScore = r => { let hw=linesOf(r).filter(l=>l[0]>l[1]).length, aw=4-hw; const tb=tbOf(r);
+  if(hw===2){ if(!tb) return null; if(tb[0]>tb[1]) hw=3; else aw=3; } return [hw,aw]; };
 
 /* ── standings (confirmed results only) ── */
 function standings(div){
   const clubs = state.clubs.filter(c=>c.division===div);
   if(clubs.length!==6) return null;
-  const T = Object.fromEntries(clubs.map(c=>[c.id,{P:0,W:0,D:0,L:0,PF:0,PA:0,Pts:0}]));
+  const T = Object.fromEntries(clubs.map(c=>[c.id,{P:0,W:0,L:0,PF:0,PA:0,Pts:0}]));
   state.fixtures.filter(f=>f.division===div).forEach(f=>{
     const r = resFor(f.id); if(!r || r.status!=='confirmed') return;
-    let hw=0,aw=0,hp=0,ap=0;
-    linesOf(r).forEach(([a,b])=>{ if(a>b)hw++; else aw++; hp+=a; ap+=b; });
+    const fs = fixScore(r); if(!fs) return;
+    const [hw,aw] = fs; let hp=0,ap=0;
+    linesOf(r).forEach(([a,b])=>{ hp+=a; ap+=b; });   /* tiebreak points stay out of point difference */
     const H=T[f.home_club], A=T[f.away_club]; if(!H||!A) return;
     H.P++;A.P++; H.PF+=hp;H.PA+=ap; A.PF+=ap;A.PA+=hp;
-    if(hw>aw){H.W++;A.L++;H.Pts+=3;} else if(aw>hw){A.W++;H.L++;A.Pts+=3;} else {H.D++;A.D++;H.Pts++;A.Pts++;}
+    if(hw>aw){H.W++;A.L++;H.Pts+=3;} else {A.W++;H.L++;A.Pts+=3;}
   });
   return clubs.map(c=>({club:c,...T[c.id],PD:T[c.id].PF-T[c.id].PA}))
     .sort((a,b)=>b.Pts-a.Pts||b.PD-a.PD||b.PF-a.PF||a.club.name.localeCompare(b.club.name));
@@ -205,15 +211,15 @@ function vTables(m){
     const tb = el('tbody');
     t.forEach((r,i)=>{
       const tr = el('tr',{class: i<2?'up': i>3?'dn':''});
-      [i+1,'',r.P,r.W,r.D,r.L,(r.PD>0?'+':'')+r.PD,r.Pts].forEach((v,k)=>{
+      [i+1,'',r.P,r.W,r.L,(r.PD>0?'+':'')+r.PD,r.Pts].forEach((v,k)=>{
         const td = el('td',{}); 
         if(k===1){ td.innerHTML = chip(r.club)+'<b>'+r.club.name+'</b>'; } else td.textContent=v;
-        if(k===7) td.style.fontFamily='Oswald';
+        if(k===6) td.style.fontFamily='Oswald';
         tr.appendChild(td);
       });
       tb.appendChild(tr);
     });
-    const tbl = el('table'); tbl.innerHTML='<thead><tr><th>#</th><th>Club</th><th>P</th><th>W</th><th>D</th><th>L</th><th>PD</th><th>Pts</th></tr></thead>';
+    const tbl = el('table'); tbl.innerHTML='<thead><tr><th>#</th><th>Club</th><th>P</th><th>W</th><th>L</th><th>PD</th><th>Pts</th></tr></thead>';
     tbl.appendChild(tb);
     m.appendChild(el('div',{class:'tw'},[tbl]));
   });
@@ -242,9 +248,9 @@ function vFixtures(m){
         out.appendChild(el('div',{class:'nh',text:'Night '+f.night+' · '+(f.day==='Tue'?'Tuesday':'Thursday')+(nd?', '+nd:'')+' · '+f.venue})); }
       const home = f.home_club===club.id, opp = clubById(home?f.away_club:f.home_club);
       const r = resFor(f.id); let resHTML='';
-      if(r&&r.status==='confirmed'){ const hw=linesOf(r).filter(l=>l[0]>l[1]).length;
-        const mw=home?hw:4-hw, tw=4-mw;
-        resHTML = `<span class="res ${mw>tw?'w':mw<tw?'l':'d'}">${mw}–${tw}</span>`; }
+      const fs = (r&&r.status==='confirmed') ? fixScore(r) : null;
+      if(fs){ const mw=home?fs[0]:fs[1], tw=home?fs[1]:fs[0];
+        resHTML = `<span class="res ${mw>tw?'w':'l'}">${mw}–${tw}</span>`; }
       const row = el('div',{class:'row'});
       row.innerHTML = `<span style="flex:1;padding-left:12px">v ${opp.name}</span>${resHTML}`;
       out.appendChild(row);
@@ -411,21 +417,35 @@ async function vFixtureDetail(m, f){
       wrap.appendChild(el('span',{text:ln,style:'width:120px;color:var(--muted)'}));
       wrap.appendChild(a); wrap.appendChild(el('span',{text:'–'})); wrap.appendChild(b);
       scBox.appendChild(wrap); return [a,b]; });
+    const tbWrap = el('div',{class:'row'}); const tbA = mkScore(), tbB = mkScore();
+    tbWrap.appendChild(el('span',{text:'Tiebreak',style:'width:120px;color:var(--muted)'}));
+    tbWrap.appendChild(tbA); tbWrap.appendChild(el('span',{text:'–'})); tbWrap.appendChild(tbB);
+    scBox.appendChild(tbWrap);
+    scBox.appendChild(el('p',{class:'mut',text:'Tiebreak: singles, only played if the four lines finish 2–2. Leave it blank otherwise.'}));
     scBox.appendChild(el('div',{style:'margin-top:10px'},[el('button',{class:'btn',text:'Submit score',onclick:async()=>{
       if(drafts.some(([a,b])=>a.value===''||b.value==='')) return toast('All four lines need scores.');
+      if(drafts.some(([a,b])=>a.value===b.value)) return toast('A line cannot finish level. Check the scores.');
       const [l1,l2,l3,l4]=drafts;
+      const homeLines = drafts.filter(([a,b])=>+a.value>+b.value).length;
+      const tbGiven = tbA.value!=='' || tbB.value!=='';
+      if(homeLines===2){
+        if(tbA.value===''||tbB.value==='') return toast('It finished 2–2. Enter the tiebreak score.');
+        if(tbA.value===tbB.value) return toast('The tiebreak needs a winner.');
+      } else if(tbGiven) return toast('The tiebreak is only played at 2–2. Clear it.');
       const { error } = await db.from('results').insert({ fixture_id:f.id, status:'pending', entered_by:p.id,
         l1h:+l1[0].value,l1a:+l1[1].value,l2h:+l2[0].value,l2a:+l2[1].value,
-        l3h:+l3[0].value,l3a:+l3[1].value,l4h:+l4[0].value,l4a:+l4[1].value });
+        l3h:+l3[0].value,l3a:+l3[1].value,l4h:+l4[0].value,l4a:+l4[1].value,
+        l5h: homeLines===2 ? +tbA.value : null, l5a: homeLines===2 ? +tbB.value : null });
       if(error) return toast('Error: '+error.message);
       await loadPublic(); toast('Submitted. Away captain confirms.'); render();
     }})]));
   } else if(!r) scBox.appendChild(el('p',{class:'mut',text:'Waiting for the home captain to enter the score.'}));
   else {
-    const hw = linesOf(r).filter(l=>l[0]>l[1]).length;
+    const fs = fixScore(r) || [2,2], tb = tbOf(r);
     const card = el('div',{class:'card'});
-    card.innerHTML = `<div class="h">${clubById(f.home_club).name} ${hw}–${4-hw} ${clubById(f.away_club).name} · ${r.status}</div>`+
-      LINES.map((ln,i)=>`<div class="row"><span style="color:var(--muted)">${ln}</span><span style="margin-left:auto">${linesOf(r)[i][0]}–${linesOf(r)[i][1]}</span></div>`).join('');
+    card.innerHTML = `<div class="h">${clubById(f.home_club).name} ${fs[0]}–${fs[1]} ${clubById(f.away_club).name} · ${r.status}</div>`+
+      LINES.map((ln,i)=>`<div class="row"><span style="color:var(--muted)">${ln}</span><span style="margin-left:auto">${linesOf(r)[i][0]}–${linesOf(r)[i][1]}</span></div>`).join('')+
+      (tb ? `<div class="row"><span style="color:var(--muted)">Tiebreak</span><span style="margin-left:auto">${tb[0]}–${tb[1]}</span></div>` : '');
     scBox.appendChild(card);
     if(r.status==='pending' && !home){
       const bar = el('div',{style:'display:flex;gap:8px'});

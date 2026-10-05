@@ -164,7 +164,7 @@ footer{padding:22px 0;display:flex;justify-content:space-between;gap:12px;flex-w
 <section id="night"><div class="wrap">
   <span class="eyebrow">Match night</span>
   <h2>Four lines, one court</h2>
-  <p>A fixture is four games against one club, back to back on one court. A league night is two fixtures against two different clubs. Your teammates are at the fence watching.</p>
+  <p>A fixture is four games against one club, back to back on one court. If it finishes 2–2, a singles tiebreak decides it, so every fixture has a winner. A league night is two fixtures against two different clubs. Your teammates are at the fence watching.</p>
   <table>
     <thead><tr><th></th><th>Line</th></tr></thead>
     <tbody>
@@ -172,6 +172,7 @@ footer{padding:22px 0;display:flex;justify-content:space-between;gap:12px;flex-w
       <tr><td>2</td><td>Women's doubles</td></tr>
       <tr><td>3</td><td>Mixed doubles</td></tr>
       <tr><td>4</td><td>Mixed doubles</td></tr>
+      <tr><td>5</td><td>Singles tiebreak, only at 2–2</td></tr>
     </tbody>
   </table>
   </div></section>
@@ -393,7 +394,7 @@ footer{padding:22px 0;display:flex;justify-content:space-between;gap:12px;flex-w
       [1,2,3,4].forEach(function(div){
         var ds = clubs.filter(function(c){ return c.division === div; });
         if (ds.length !== 6) return;
-        var T = {}; ds.forEach(function(c){ T[c.id] = {P:0,W:0,D:0,L:0,PF:0,PA:0,Pts:0}; });
+        var T = {}; ds.forEach(function(c){ T[c.id] = {P:0,W:0,L:0,PF:0,PA:0,Pts:0}; });
         var fx = [];
         fixtures.filter(function(f){ return f.division === div; }).forEach(function(f){
           var r = resFor[f.id], done = r && r.status === 'confirmed';
@@ -403,19 +404,24 @@ footer{padding:22px 0;display:flex;justify-content:space-between;gap:12px;flex-w
             hw = 0; var hp = 0, ap = 0;
             lines.forEach(function(l){ if(l[0] > l[1]) hw++; hp += l[0]; ap += l[1]; });
             aw = 4 - hw;
+            /* 2-2 after four lines: the singles tiebreak (line 5) decides it, 3-2.
+               Tiebreak points do not count toward point difference. */
+            if (hw === 2) {
+              if (r.l5h != null && r.l5a != null && r.l5h !== r.l5a) { if (r.l5h > r.l5a) hw = 3; else aw = 3; }
+              else { hw = null; aw = null; }
+            }
             var H = T[f.home_club], A = T[f.away_club];
-            if (H && A) {
+            if (hw != null && H && A) {
               H.P++; A.P++; H.PF += hp; H.PA += ap; A.PF += ap; A.PA += hp;
               if (hw > aw) { H.W++; A.L++; H.Pts += 3; }
-              else if (aw > hw) { A.W++; H.L++; A.Pts += 3; }
-              else { H.D++; A.D++; H.Pts++; A.Pts++; }
+              else { A.W++; H.L++; A.Pts += 3; }
             }
           }
           fx.push({ n: f.night, day: f.day, v: f.venue, nd: nightDate(f.night, f.day),
             h: (byId[f.home_club]||{}).name, a: (byId[f.away_club]||{}).name, hw: hw, aw: aw });
         });
         data.divisions[div] = ds.map(function(c){ var t = T[c.id];
-          return { club: c.name, P:t.P, W:t.W, D:t.D, L:t.L, PD:t.PF-t.PA, Pts:t.Pts }; })
+          return { club: c.name, P:t.P, W:t.W, L:t.L, PD:t.PF-t.PA, Pts:t.Pts }; })
           .sort(function(a,b){ return b.Pts-a.Pts || b.PD-a.PD || a.club.localeCompare(b.club); });
         data.fixtures[div] = fx;
       });
@@ -434,14 +440,14 @@ footer{padding:22px 0;display:flex;justify-content:space-between;gap:12px;flex-w
     if(!rows || !rows.length) return;
     var h = document.createElement('div'); h.className='stand-h'; h.textContent='Division '+div; root.appendChild(h);
     var t = document.createElement('table');
-    t.innerHTML = '<thead><tr><th>#</th><th>Club</th><th>P</th><th>W</th><th>D</th><th>L</th><th>PD</th><th>Pts</th></tr></thead>';
+    t.innerHTML = '<thead><tr><th>#</th><th>Club</th><th>P</th><th>W</th><th>L</th><th>PD</th><th>Pts</th></tr></thead>';
     var tb = document.createElement('tbody');
     rows.forEach(function(r,i){
       var tr = document.createElement('tr');
       if(i<2) tr.className='stand-up'; else if(i>rows.length-3) tr.className='stand-dn';
-      [i+1, r.club, r.P, r.W, r.D, r.L, (r.PD>0?'+':'')+r.PD, r.Pts].forEach(function(v,k){
+      [i+1, r.club, r.P, r.W, r.L, (r.PD>0?'+':'')+r.PD, r.Pts].forEach(function(v,k){
         var td = document.createElement('td'); td.textContent = v;
-        if(k===1 || k===7) td.style.fontWeight = '600';
+        if(k===1 || k===6) td.style.fontWeight = '600';
         tr.appendChild(td);
       });
       tb.appendChild(tr);
