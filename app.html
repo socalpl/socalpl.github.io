@@ -118,7 +118,13 @@ function nightDate(night, day){
   const dt = new Date(parts[0], parts[1]-1, parts[2] + (night-1)*7 + (day==='Thu'?2:0));
   return dt.toLocaleDateString('en-US',{month:'short',day:'numeric'});
 }
-const fixTime = f => (f.night===8 || f.round%2===1) ? '6:30 PM' : '~7:45 PM';
+const dayName = d => ({Tue:'Tuesday',Thu:'Thursday',Sun:'Sunday'}[d] || d);
+/* Sundays, two waves on the same courts. Divisions 1-2 take the first wave on match days 1-4,
+   divisions 3-4 on match days 5-8. Planned clock; confirm against the venue contract. */
+const fixTime = f => { if(f.day!=='Sun') return (f.night===8 || f.round%2===1) ? '6:30 PM' : '~7:45 PM';
+  const early = (f.division<=2) === (f.night<=4);
+  if(f.night===8) return early ? '2:00 PM' : '3:30 PM';
+  return f.round%2===1 ? (early ? '2:00 PM' : '4:45 PM') : (early ? '~3:20 PM' : '~6:05 PM'); };
 const resFor = fid => state.results.find(r=>r.fixture_id===fid);
 const linesOf = r => [[r.l1h,r.l1a],[r.l2h,r.l2a],[r.l3h,r.l3a],[r.l4h,r.l4a]];
 /* line 5: singles tiebreak, played only when the four lines finish 2-2 */
@@ -174,6 +180,7 @@ function render(){
 function vSignIn(m){
   m.appendChild(el('h2',{text:'Sign in'}));
   m.appendChild(el('div',{class:'sub',text:'For players and captains. Enter your email and we send a sign-in link — no passwords. Tables, clubs, and the map are on the main site.'}));
+  const pp = el('p',{class:'mut'}); pp.innerHTML = 'How we handle your details: <a href="privacy.html">privacy policy</a>.'; 
   const recents = (() => { try { return JSON.parse(localStorage.getItem('scpl-signin-emails')||'[]'); } catch(e){ return []; } })();
   const prefill = (() => { const mm = location.hash.match(/email=([^,&]+)/); return mm ? decodeURIComponent(mm[1]) : ''; })();
   const remember = email => { try {
@@ -198,6 +205,7 @@ function vSignIn(m){
     const email = inp.value.trim(); if(!email) return;
     send(email);
   }})]));
+  pp.style.marginTop = '18px'; m.appendChild(pp);
 }
 async function signOut(){ await db.auth.signOut(); location.href='/'; }
 
@@ -245,7 +253,7 @@ function vFixtures(m){
     mine.forEach(f=>{
       if(!seenN[f.night]){ seenN[f.night]=1;
         const nd = nightDate(f.night, f.day);
-        out.appendChild(el('div',{class:'nh',text:'Night '+f.night+' · '+(f.day==='Tue'?'Tuesday':'Thursday')+(nd?', '+nd:'')+' · '+f.venue})); }
+        out.appendChild(el('div',{class:'nh',text:'Match day '+f.night+' · '+dayName(f.day)+(nd?', '+nd:'')+' · '+f.venue})); }
       const home = f.home_club===club.id, opp = clubById(home?f.away_club:f.home_club);
       const r = resFor(f.id); let resHTML='';
       const fs = (r&&r.status==='confirmed') ? fixScore(r) : null;
@@ -326,7 +334,7 @@ function vClub(m){
       const r = resFor(f.id);
       const b = el('button',{class:'fxbtn',onclick:()=>{state.sel=f; render();}});
       const nd = nightDate(f.night, f.day);
-      b.innerHTML = `<span style="flex:1">N${f.night}${nd?' · '+nd:''} · ${clubById(f.home_club).name} v ${clubById(f.away_club).name}</span>
+      b.innerHTML = `<span style="flex:1">MD${f.night}${nd?' · '+nd:''} · ${clubById(f.home_club).name} v ${clubById(f.away_club).name}</span>
         <span style="font-size:12px;color:var(--muted)">${r? r.status : ''}</span>`;
       m.appendChild(b);
     });
@@ -345,7 +353,7 @@ async function vFixtureDetail(m, f){
   m.appendChild(el('button',{class:'ghost',text:'‹ Back',onclick:()=>{state.sel=null; render();}}));
   m.appendChild(el('h2',{text:clubById(f.home_club).name+' v '+clubById(f.away_club).name}));
   const nd2 = nightDate(f.night, f.day);
-  m.appendChild(el('div',{class:'sub',text:'Night '+f.night+' · '+(f.day==='Tue'?'Tuesday':'Thursday')+(nd2?', '+nd2:'')+' · '+fixTime(f)+' · '+f.venue}));
+  m.appendChild(el('div',{class:'sub',text:'Match day '+f.night+' · '+dayName(f.day)+(nd2?', '+nd2:'')+' · '+fixTime(f)+' · '+f.venue}));
 
   m.appendChild(el('div',{class:'sec',text:'Lineup (sealed until both clubs submit)'}));
   const luBox = el('div'); m.appendChild(luBox);
@@ -507,7 +515,7 @@ function vAdmin(m){
   const iWrap = el('div'); m.appendChild(iWrap);
 
   m.appendChild(el('div',{class:'sec',text:'Season dates'}));
-  m.appendChild(el('div',{class:'sub',text:'Set the date of Night 1 (the first Tuesday). Every night dates itself from this.'}));
+  m.appendChild(el('div',{class:'sub',text:'Set the date of Match day 1 (the first Sunday). Every match day dates itself from this.'}));
   const sd = el('input',{type:'date',style:'display:block;margin:2px 0 10px'}); sd.value = state.settings.season_start || '';
   sd.addEventListener('change', async()=>{
     const { error } = await db.from('settings').upsert({ key:'season_start', value: sd.value });
@@ -613,7 +621,7 @@ function vAdmin(m){
   dis.forEach(r=>{
     const f = state.fixtures.find(x=>x.id===r.fixture_id); if(!f) return;
     const row = el('div',{class:'row'});
-    row.innerHTML = `<span style="flex:1">D${f.division} · N${f.night} · ${clubById(f.home_club).name} v ${clubById(f.away_club).name}</span>
+    row.innerHTML = `<span style="flex:1">D${f.division} · MD${f.night} · ${clubById(f.home_club).name} v ${clubById(f.away_club).name}</span>
       <b style="color:${r.status==='disputed'?'var(--red)':'var(--muted)'}">${r.status}</b>`;
     row.appendChild(el('button',{class:'ghost',text:'Confirm',onclick:async()=>{
       await db.from('results').update({status:'confirmed'}).eq('fixture_id',r.fixture_id);
@@ -635,10 +643,9 @@ async function generateSeason(){
     const B = baseRounds(); let round=0;
     for(let cyc=0;cyc<3;cyc++) for(const rd of B){ round++;
       const night = round<15 ? Math.ceil(round/2) : 8;
-      const tue = d<=2, first = night<=4;
-      const venue = (tue===first) ? 'Home Ground A' : 'Home Ground B';
+      const venue = 'Home Ground';   /* one ground, every Sunday; both waves share its six courts */
       rd.forEach(([h,a],mIdx)=>{ const [H,A] = cyc===1 ? [a,h] : [h,a];
-        rows.push({ division:d, round, match:mIdx+1, night, day: tue?'Tue':'Thu', venue,
+        rows.push({ division:d, round, match:mIdx+1, night, day: 'Sun', venue,
           home_club:slugs[H], away_club:slugs[A] }); });
     }
   }

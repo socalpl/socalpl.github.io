@@ -162,9 +162,9 @@ footer{padding:22px 0;display:flex;justify-content:space-between;gap:12px;flex-w
 </div></section>
 
 <section id="night"><div class="wrap">
-  <span class="eyebrow">Match night</span>
+  <span class="eyebrow">Match day</span>
   <h2>Four lines, one court</h2>
-  <p>A fixture is four games against one club, back to back on one court. If it finishes 2–2, a singles tiebreak decides it, so every fixture has a winner. A league night is two fixtures against two different clubs. Your teammates are at the fence watching.</p>
+  <p>A fixture is four games against one club, back to back on one court. If it finishes 2–2, a singles tiebreak decides it, so every fixture has a winner. A match day is two fixtures against two different clubs. Your teammates are at the fence watching.</p>
   <table>
     <thead><tr><th></th><th>Line</th></tr></thead>
     <tbody>
@@ -180,7 +180,7 @@ footer{padding:22px 0;display:flex;justify-content:space-between;gap:12px;flex-w
 <section id="tables"><div class="wrap">
   <span class="eyebrow">The table</span>
   <h2>Division tables</h2>
-  <div id="standings-root"><p class="lede" id="standings-empty">Season 1 tables appear here after opening night.</p></div>
+  <div id="standings-root"><p class="lede" id="standings-empty">Season 1 tables appear here after opening day.</p></div>
   <div id="fixtures-block" style="display:none">
     <h3 style="margin-top:26px">Your fixtures</h3>
     <div id="picker-wrap">
@@ -324,14 +324,14 @@ footer{padding:22px 0;display:flex;justify-content:space-between;gap:12px;flex-w
 
 <section id="season"><div class="wrap">
   <span class="eyebrow">The season</span>
-  <h2>Fifteen fixtures, two nights</h2>
-  <p>You play everyone in your division three times. Every league night is a <b>doubleheader</b>: two fixtures back to back against two different clubs, about two and a half hours of pickleball.</p>
+  <h2>Fifteen fixtures, eight Sundays</h2>
+  <p>You play everyone in your division three times. Every match day is a <b>doubleheader</b>: two fixtures back to back against two different clubs, about two and a half hours of pickleball.</p>
   <div class="nights">
-    <div class="night"><div class="d">Divisions 1 &amp; 2</div><div class="v">One weeknight evening · 6 courts<br>First serve @ 6:30PM</div></div>
-    <div class="night"><div class="d">Divisions 3 &amp; 4</div><div class="v">One weeknight evening · 6 courts<br>First serve @ 6:30PM</div></div>
+    <div class="night"><div class="d">Divisions 1 &amp; 2</div><div class="v">Sunday afternoon · 6 courts<br>First wave to start the season</div></div>
+    <div class="night"><div class="d">Divisions 3 &amp; 4</div><div class="v">Sunday afternoon · 6 courts<br>Second wave to start the season</div></div>
   </div>
-  <p style="font-size:14.5px;color:var(--muted);margin-top:2px">Exact nights announced with the opening schedule.</p>
-  <p>League nights run at two indoor home grounds, and every club plays each ground equally. Venues announced before opening night.</p>
+  <p style="font-size:14.5px;color:var(--muted);margin-top:2px">The two waves swap at mid-season. Start times announced with the opening schedule.</p>
+  <p>Every match day is at one indoor home ground, so all four divisions play under one roof. Venue announced before opening day.</p>
 </div></section>
 
 <section id="join" class="join"><div class="wrap">
@@ -347,11 +347,12 @@ footer{padding:22px 0;display:flex;justify-content:space-between;gap:12px;flex-w
     <div id="cf-players-wrap"><label>Players you're bringing</label><select id="cf-players"><option>Just me</option><option>2–3</option><option>4–6</option><option>7–10</option><option>10+</option></select></div>
     <div><label>Name</label><input id="cf-name" autocomplete="name"></div>
     <div><label>Email</label><input id="cf-email" type="email" autocomplete="email" inputmode="email"></div>
-    <div class="full"><label>Anything else (optional)</label><input id="cf-notes" placeholder="Nights you can play, people you're bringing, questions"></div>
+    <div class="full"><label>Anything else (optional)</label><input id="cf-notes" placeholder="Sundays you can't make, people you're bringing, questions"></div>
     <button class="btn-claim" id="cf-send" type="button">Claim my spot</button>
     <div class="form-msg" id="cf-msg"></div>
   </div>
-  <p style="margin-top:16px">Or just get in touch: <b>hello@socalpl.com</b> · <b>@socalpl</b></p>
+  <p style="margin-top:16px">Or just get in touch: <a href="mailto:hello@socalpl.com" style="color:inherit"><b>hello@socalpl.com</b></a> · <a href="https://www.instagram.com/socalpl/" target="_blank" rel="noopener" style="color:inherit"><b>@socalpl on Instagram</b></a></p>
+  <p style="margin-top:8px;font-size:14.5px">We use your details only to organize the league. <a href="privacy.html" style="color:inherit">Privacy policy</a></p>
 </div></section>
 
 </main>
@@ -360,6 +361,7 @@ footer{padding:22px 0;display:flex;justify-content:space-between;gap:12px;flex-w
   <footer>
     <span>Southern California Pickleball League</span>
     <span>Est. 2026 · one pyramid, Playa Vista to San Pedro</span>
+    <span><a href="https://www.instagram.com/socalpl/" target="_blank" rel="noopener" style="color:inherit">Instagram</a> · <a href="privacy.html" style="color:inherit">Privacy</a></span>
   </footer>
 </div>
 
@@ -498,7 +500,7 @@ footer{padding:22px 0;display:flex;justify-content:space-between;gap:12px;flex-w
       if(!seen[f.n]){
         seen[f.n] = true;
         var nh = document.createElement('div'); nh.className='fx-night';
-        nh.textContent = 'Night '+f.n+' · '+(f.day==='Tue'?'Tuesday':'Thursday')+(f.nd?', '+f.nd:'')+' · '+f.v;
+        nh.textContent = 'Match day '+f.n+' · '+({Tue:'Tuesday',Thu:'Thursday',Sun:'Sunday'}[f.day]||f.day)+(f.nd?', '+f.nd:'')+' · '+f.v;
         froot.appendChild(nh);
       }
       var row = document.createElement('div'); row.className='fx-row';
